@@ -14,19 +14,17 @@ import logging
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
-# === 1. CẤU HÌNH ĐƯỜNG DẪN (QUAN TRỌNG) ===
+# === 1. CẤU HÌNH ĐƯỜNG DẪN ===
 YOLO_ROOT = r"D:\PBL3\CameraWebServer1\yolov5" # Đường dẫn gốc đến thư mục yolov5
 if YOLO_ROOT not in sys.path:
     sys.path.insert(0, YOLO_ROOT) # Chèn vào đầu để ưu tiên
-
-# === 2. "SIÊU FIX" LỖI UNPICKLE (AttributeError / ModuleNotFoundError) ===
-import types # Thêm import này
+import types
 
 # Tạo một package 'yolov5' giả
 if 'yolov5' not in sys.modules:
     sys.modules['yolov5'] = types.ModuleType('yolov5')
 
-# Import các module cục bộ thật sự
+# Import modules
 import models
 import models.yolo
 import models.common
@@ -38,24 +36,24 @@ sys.modules['yolov5.models.yolo'] = models.yolo
 sys.modules['yolov5.models.common'] = models.common
 sys.modules['yolov5.utils'] = utils
 
-# Gán ghép class bị thiếu (nếu có)
+# Gán ghép class bị thiếu
 try:
     from models.yolo import DetectionModel
     sys.modules['models.yolo'].DetectionModel = DetectionModel
     sys.modules['yolov5.models.yolo'].DetectionModel = DetectionModel
 except ImportError:
-    pass # Bỏ qua nếu không tìm thấy
+    pass
 # ====================================================================
 
-# Import các module của YOLOv5 (SAU KHI ĐÃ FIX)
+# Import các module của YOLOv5
 from models.common import DetectMultiBackend
-from utils.general import non_max_suppression, scale_boxes # Đổi tên từ scale_coords
+from utils.general import non_max_suppression, scale_boxes
 from utils.augmentations import letterbox
 from utils.torch_utils import select_device
 
 # Cấu hình Firebase & Model
 SERVICE_ACCOUNT_KEY = 'serviceAccountKey.json'
-DATABASE_URL = 'https://licenseplate-65834-default-rtdb.asia-southeast1.firebasedatabase.app/' # Sửa lại nếu cần
+DATABASE_URL = 'https://licenseplate-65834-default-rtdb.asia-southeast1.firebasedatabase.app/'
 WEIGHTS_PATH = os.path.join(YOLO_ROOT, 'best.pt')
 CONF_THRES = 0.4
 IOU_THRES = 0.45
@@ -77,14 +75,14 @@ except Exception as e:
     print(f"❌ Lỗi Firebase: {e}")
     db_ref = None
 
-# --- KHỞI TẠO MODEL (CHỈ CHẠY 1 LẦN KHI START SERVER) ---
+# --- KHỞI TẠO MODEL ---
 print("⏳ Đang tải model YOLOv5... (Vui lòng đợi)")
 device = select_device('') # Tự động chọn CPU hoặc GPU
 model = DetectMultiBackend(WEIGHTS_PATH, device=device, dnn=False, data=None, fp16=False)
 stride, names, pt = model.stride, model.names, model.pt
 print("✅ Model đã tải xong! Sẵn sàng xử lý.")
 
-# --- Khởi tạo EasyOCR (Chỉ chạy 1 lần) ---
+# --- Khởi tạo EasyOCR ---
 print("⏳ Đang tải EasyOCR...")
 reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available())
 print("✅ EasyOCR sẵn sàng.")
@@ -109,9 +107,8 @@ def process_image_in_memory(image_bytes):
     detected_plate_text = None
     for i, det in enumerate(pred):
         if len(det):
-            det[:, :4] = scale_boxes(img.shape[2:], det[:, :4], img0.shape).round() # Sửa tên hàm
+            det[:, :4] = scale_boxes(img.shape[2:], det[:, :4], img0.shape).round()
             for *xyxy, conf, cls in reversed(det):
-                # 🎯 THAY TÊN CLASS CỦA BẠN VÀO ĐÂY
                 if names[int(cls)] == 'license_plate': 
                     x1, y1, x2, y2 = map(int, xyxy)
                     crop = img0[y1:y2, x1:x2]
@@ -142,7 +139,6 @@ def upload_image():
             print(f"🙂‍↔️ Tìm thấy biển số: {license_plate}")
 
             # === 💾 LƯU ẢNH (Chỉ chạy khi có biển số) ===
-            # Mẹo: Đặt tên file kèm biển số luôn cho dễ tìm!
             filename = f"{license_plate}_{int(time.time())}.jpg" 
             filepath = os.path.join(IMAGE_SAVE_DIR, filename)
             
@@ -170,4 +166,5 @@ def upload_image():
         print(f"⛔️ Lỗi server: {e}")
         return "Error", 500
 if __name__ == '__main__':
+
     app.run(host='0.0.0.0', port=5000, debug=False)
